@@ -114,7 +114,7 @@ Challenge: Minority High-risk class detection due to imbalance.
 ## Installation & Run
 
 ```bash
-git clone https://github.com/[yourusername]/CVD-Risk-Prediction.git
+git clone https://github.com/[mananawasthi56]/CVD-Risk-Prediction.git
 cd CVD-Risk-Prediction
 pip install -r requirements.txt
 streamlit run app.py
