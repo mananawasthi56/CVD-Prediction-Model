@@ -1,25 +1,47 @@
+# ======================= IMPORTS =======================
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
+import streamlit as st
 
-df = pd.read_csv("C:/Users/manan/Downloads/CVD_dataset.csv")
+from sklearn.preprocessing import LabelEncoder, StandardScaler
+from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LogisticRegression
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import accuracy_score
+from xgboost import XGBClassifier
 
-# Clean / rename incorrect column names
+# ======================= PAGE CONFIG =======================
+st.set_page_config(
+    page_title="CVD Risk Prediction System",
+    page_icon="❤️",
+    layout="wide"
+)
+
+# ======================= LOAD DATA =======================
+@st.cache_data
+def load_data():
+    df = pd.read_csv("CVD_dataset.csv")
+    return df
+
+df = load_data()
+
+# ======================= DATA CLEANING =======================
 df = df.rename(columns={
     "Smoki0g Status": "Smoking Status",
     "Famil1 Histor1 of CVD": "Family History of CVD",
     "Blood Pressure (mmHg)": "Blood Pressure",
 })
 
-# If Blood Pressure column contains text values like "130/80"
+# Split BP column if needed
 if df["Blood Pressure"].dtype == "object":
     df[['BP_Systolic', 'BP_Diastolic']] = df['Blood Pressure'].str.split('/', expand=True)
     df['BP_Systolic'] = pd.to_numeric(df['BP_Systolic'], errors='coerce')
     df['BP_Diastolic'] = pd.to_numeric(df['BP_Diastolic'], errors='coerce')
 
-df = df.drop(columns=['Blood Pressure'])
-df = df.drop(columns=['Height (cm)'])
+df = df.drop(columns=['Blood Pressure', 'Height (cm)'], errors='ignore')
 
 # Fill missing values
 num_cols = df.select_dtypes(include=['float64', 'int64']).columns
@@ -29,46 +51,34 @@ cat_cols = df.select_dtypes(include=['object']).columns
 df[cat_cols] = df[cat_cols].fillna(df[cat_cols].mode().iloc[0])
 
 # ======================= ENCODING =======================
-
-from sklearn.preprocessing import LabelEncoder
-
-df = df.drop(columns=['BP_Systolic', 'BP_Diastolic'])
-
 le = LabelEncoder()
 df['CVD Risk Level Encoded'] = le.fit_transform(df['CVD Risk Level'])
 
-cat_cols = ['Sex', 'Physical Activity Level', 'Blood Pressure Category']
-df_encoded = pd.get_dummies(df, columns=cat_cols, drop_first=True)
+df = df.drop(columns=['BP_Systolic', 'BP_Diastolic'], errors='ignore')
+
+df_encoded = pd.get_dummies(
+    df,
+    columns=['Sex', 'Physical Activity Level', 'Blood Pressure Category'],
+    drop_first=True
+)
 
 X = df_encoded.drop(columns=['CVD Risk Level', 'CVD Risk Level Encoded', 'CVD Risk Score'])
 y = df_encoded['CVD Risk Level Encoded']
 
-# ======================= TRAINING =======================
-
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler
-from sklearn.linear_model import LogisticRegression
-from sklearn.tree import DecisionTreeClassifier
-from sklearn.ensemble import RandomForestClassifier
-from xgboost import XGBClassifier
-from sklearn.metrics import accuracy_score
-
+# ======================= TRAIN TEST SPLIT =======================
 X_train, X_test, y_train, y_test = train_test_split(
     X, y, test_size=0.2, random_state=42, stratify=y
 )
 
+# ======================= SCALING =======================
 scaler = StandardScaler()
 X_train_scaled = scaler.fit_transform(X_train)
 X_test_scaled = scaler.transform(X_test)
 
+# ======================= MODELS =======================
 lr = LogisticRegression(max_iter=300, class_weight='balanced')
-lr.fit(X_train_scaled, y_train)
-
 dt = DecisionTreeClassifier(max_depth=10, class_weight='balanced', random_state=42)
-dt.fit(X_train, y_train)
-
 rf = RandomForestClassifier(n_estimators=200, class_weight='balanced', random_state=42)
-rf.fit(X_train, y_train)
 
 xgb = XGBClassifier(
     n_estimators=300,
@@ -78,38 +88,15 @@ xgb = XGBClassifier(
     colsample_bytree=0.7,
     objective='multi:softprob',
     num_class=3,
-    eval_metric='mlogloss'
+    eval_metric='mlogloss',
+    use_label_encoder=False
 )
+
+# ======================= TRAIN MODELS =======================
+lr.fit(X_train_scaled, y_train)
+dt.fit(X_train, y_train)
+rf.fit(X_train, y_train)
 xgb.fit(X_train, y_train)
-
-# ======================= STREAMLIT APP =======================
-
-import streamlit as st
-
-st.set_page_config(
-    page_title="CVD Risk Prediction System",
-    page_icon="❤️",
-    layout="wide",
-)
-
-st.markdown("""
-<style>
-#MainMenu {visibility: hidden;}
-footer {visibility: hidden;}
-
-body {
-    background-color:#0e1117;
-    color:#e6e6e6;
-}
-
-.stButton>button {
-    width:100%;
-    background:#ff4b4b;
-    color:white;
-}
-</style>
-""", unsafe_allow_html=True)
-
 
 # ======================= SIDEBAR =======================
 st.sidebar.title("🧭 Navigation")
@@ -189,7 +176,7 @@ elif section == "Graphs":
         sns.histplot(df['BMI'], kde=True, ax=ax)
         st.pyplot(fig)
 
-    fig, ax = plt.subplots(figsize=(10,4))
+    fig, ax = plt.subplots(figsize=(10, 4))
     sns.heatmap(df.select_dtypes(include='number').corr(), cmap='coolwarm', ax=ax)
     st.pyplot(fig)
 
@@ -197,20 +184,13 @@ elif section == "Graphs":
 elif section == "Dataset View":
 
     st.title("📂 Dataset Overview")
-
-    st.subheader("Dataset Shape")
-    st.write(df.shape)
-
-    st.subheader("Sample Records")
+    st.write("Shape:", df.shape)
     st.dataframe(df.head(50), use_container_width=True)
-
     st.subheader("Missing Values")
     st.dataframe(df.isnull().sum())
 
 # ======================= MODEL COMPARISON =======================
 elif section == "Model Comparison":
-
-    st.title("📊 Model Comparison")
 
     comparison_df = pd.DataFrame({
         "Model": ["Logistic Regression", "Decision Tree", "Random Forest", "XGBoost"],
@@ -222,6 +202,7 @@ elif section == "Model Comparison":
         ]
     })
 
+    st.title("📊 Model Comparison")
     st.dataframe(comparison_df, use_container_width=True)
 
     fig, ax = plt.subplots()
@@ -233,9 +214,8 @@ elif section == "Model Comparison":
 else:
 
     st.title("📘 Project Information")
-
     st.markdown("""
     **Project:** Cardiovascular Disease Risk Prediction  
-    **Tech Stack:** Python, Machine Learning, XGBoost, Streamlit  
+    **Tech Stack:** Python, ML, XGBoost, Streamlit  
     **Outcome:** Real-time healthcare risk prediction system  
     """)
