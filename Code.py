@@ -12,8 +12,6 @@ df = df.rename(columns={
     "Blood Pressure (mmHg)": "Blood Pressure",
 })
 
-df.columns
-
 # If Blood Pressure column contains text values like "130/80"
 if df["Blood Pressure"].dtype == "object":
     df[['BP_Systolic', 'BP_Diastolic']] = df['Blood Pressure'].str.split('/', expand=True)
@@ -22,121 +20,30 @@ if df["Blood Pressure"].dtype == "object":
 
 df = df.drop(columns=['Blood Pressure'])
 df = df.drop(columns=['Height (cm)'])
-df.isnull().sum()
 
-# numeric columns filling with median
+# Fill missing values
 num_cols = df.select_dtypes(include=['float64', 'int64']).columns
 df[num_cols] = df[num_cols].fillna(df[num_cols].median())
 
-# categorical columns filling with mode
 cat_cols = df.select_dtypes(include=['object']).columns
 df[cat_cols] = df[cat_cols].fillna(df[cat_cols].mode().iloc[0])
 
-df.info()
-df.head()
-plt.figure(figsize=(6,4))
-sns.histplot(df['Age'], kde=True, color='blue')
-plt.title("Age Distribution")
-plt.show()
-
-plt.figure(figsize=(6,4))
-sns.histplot(df['BMI'], kde=True, color='green')
-plt.title("BMI Distribution")
-plt.show()
-
-plt.figure(figsize=(6,4))
-sns.histplot(df['Total Cholesterol (mg/dL)'], kde=True, color='red')
-plt.title("Cholesterol Distribution")
-plt.show()
-
-plt.figure(figsize=(6,4))
-sns.histplot(df['Fasting Blood Sugar (mg/dL)'], kde=True, color='purple')
-plt.title("Blood Sugar Distribution")
-plt.show()
-
-plt.figure(figsize=(6,4))
-sns.histplot(df['Estimated LDL (mg/dL)'], kde=True, color='brown')
-plt.title("LDL Distribution")
-plt.show()
-
-# CVD RISK LEVEL ANALYSIS
-
-plt.figure(figsize=(6,4))
-sns.countplot(data=df, x='CVD Risk Level', palette='viridis')
-plt.title("CVD Risk Level Counts")
-plt.show()
-
-plt.figure(figsize=(6,4))
-sns.countplot(data=df, x='Sex', hue='CVD Risk Level', palette='coolwarm')
-plt.title("CVD Risk Level by Sex")
-plt.show()
-
-# LIFESTYLE FACTORS VS RISK
-
-plt.figure(figsize=(6,4))
-sns.countplot(data=df, x='Smoking Status', hue='CVD Risk Level')
-plt.title("Smoking vs CVD Risk")
-plt.show()
-
-plt.figure(figsize=(6,4))
-sns.countplot(data=df, x='Diabetes Status', hue='CVD Risk Level')
-plt.title("Diabetes vs CVD Risk")
-plt.show()
-
-plt.figure(figsize=(6,4))
-sns.countplot(data=df, x='Physical Activity Level', hue='CVD Risk Level')
-plt.title("Physical Activity Level vs CVD Risk")
-plt.xticks(rotation=20)
-plt.show()
-
-# CORRELATION HEATMAP
-
-plt.figure(figsize=(12,6))
-sns.heatmap(df.select_dtypes(include='number').corr(), annot=False, cmap='coolwarm')
-plt.title("Correlation Heatmap")
-plt.show()
-
-# OUTLIER CHECK (Boxplots)
-
-num_cols = ['BMI', 'Total Cholesterol (mg/dL)', 
-            'Fasting Blood Sugar (mg/dL)', 'Estimated LDL (mg/dL)', 'Age']
-
-for col in num_cols:
-    plt.figure(figsize=(6,4))
-    sns.boxplot(x=df[col], color='orange')
-    plt.title(f"Boxplot of {col}")
-    plt.show()
+# ======================= ENCODING =======================
 
 from sklearn.preprocessing import LabelEncoder
 
-# Remove duplicates created earlier
 df = df.drop(columns=['BP_Systolic', 'BP_Diastolic'])
 
-# Clean column names
-df = df.rename(columns={
-    "Smoki0g Status": "Smoking Status",
-    "Famil1 Histor1 of CVD": "Family History of CVD",
-})
-
-# ENCODE TARGET
 le = LabelEncoder()
 df['CVD Risk Level Encoded'] = le.fit_transform(df['CVD Risk Level'])
 
-# Drop original target after encoding
-target = 'CVD Risk Level Encoded'
-
-# ENCODE categorical columns
 cat_cols = ['Sex', 'Physical Activity Level', 'Blood Pressure Category']
 df_encoded = pd.get_dummies(df, columns=cat_cols, drop_first=True)
 
-# SELECT FEATURE COLUMNS
 X = df_encoded.drop(columns=['CVD Risk Level', 'CVD Risk Level Encoded', 'CVD Risk Score'])
 y = df_encoded['CVD Risk Level Encoded']
 
-
-print("Final Feature Count:", X.shape[1])
-print("X Shape:", X.shape)
-print("y Distribution:\n", y.value_counts())
+# ======================= TRAINING =======================
 
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
@@ -144,81 +51,24 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import RandomForestClassifier
 from xgboost import XGBClassifier
-from sklearn.metrics import classification_report, confusion_matrix , accuracy_score
-from imblearn.over_sampling import SMOTE
-
-# Train-test split
+from sklearn.metrics import accuracy_score
 
 X_train, X_test, y_train, y_test = train_test_split(
     X, y, test_size=0.2, random_state=42, stratify=y
 )
 
-# Scaling
-
 scaler = StandardScaler()
 X_train_scaled = scaler.fit_transform(X_train)
 X_test_scaled = scaler.transform(X_test)
 
-from imblearn.over_sampling import SMOTE
-smote = SMOTE(random_state=42)
-X_train_sm, y_train_sm = smote.fit_resample(X_train_scaled, y_train)
-
-
-# Logistic Regression
-
 lr = LogisticRegression(max_iter=300, class_weight='balanced')
 lr.fit(X_train_scaled, y_train)
-y_pred_lr = lr.predict(X_test_scaled)
 
-print("\n Logistic Regression Report:")
-print(classification_report(y_test, y_pred_lr))
-print("Accuracy: ",accuracy_score( y_test , y_pred_lr),"\n") 
-#  Decision Tree
-
-dt = DecisionTreeClassifier(
-    max_depth=10,
-    class_weight='balanced',
-    random_state=42
-)
+dt = DecisionTreeClassifier(max_depth=10, class_weight='balanced', random_state=42)
 dt.fit(X_train, y_train)
-y_pred_dt = dt.predict(X_test)
 
-print("\n Decision Tree Report:")
-print(classification_report(y_test, y_pred_dt))
-print("Accuracy: ",accuracy_score( y_test , y_pred_dt),"\n") 
-
-# Random Forest
-
-rf = RandomForestClassifier(
-    n_estimators=200,
-    class_weight='balanced',
-    random_state=42
-)
+rf = RandomForestClassifier(n_estimators=200, class_weight='balanced', random_state=42)
 rf.fit(X_train, y_train)
-y_pred_rf = rf.predict(X_test)
-
-print("\n Random Forest Report:")
-print(classification_report(y_test, y_pred_rf))
-print("Accuracy: ",accuracy_score( y_test , y_pred_rf),"\n") 
-
-# Random Forest + SMOTE
-
-smote = SMOTE(random_state=42)
-X_train_sm, y_train_sm = smote.fit_resample(X_train, y_train)
-
-rf_sm = RandomForestClassifier(
-    n_estimators=200,
-    random_state=42
-)
-rf_sm.fit(X_train_sm, y_train_sm)
-y_pred_rf_sm = rf_sm.predict(X_test)
-
-print("\n Random Forest + SMOTE Report:")
-print(classification_report(y_test, y_pred_rf_sm))
-print("Accuracy: ",accuracy_score( y_test , y_pred_rf_sm),"\n") 
-#  XGBOOST CLASSIFIER
-
-from xgboost import XGBClassifier
 
 xgb = XGBClassifier(
     n_estimators=300,
@@ -226,15 +76,166 @@ xgb = XGBClassifier(
     max_depth=5,
     subsample=0.8,
     colsample_bytree=0.7,
-    objective='multi:softprob', 
+    objective='multi:softprob',
     num_class=3,
     eval_metric='mlogloss'
 )
-
 xgb.fit(X_train, y_train)
-y_pred_xgb = xgb.predict(X_test)
 
-print("\nXGBOOST REPORT:")
-print(classification_report(y_test, y_pred_xgb, zero_division=0))
-print("Accuracy:", accuracy_score(y_test, y_pred_xgb))
+# ======================= STREAMLIT APP =======================
 
+import streamlit as st
+
+st.set_page_config(
+    page_title="CVD Risk Prediction System",
+    page_icon="❤️",
+    layout="wide",
+)
+
+st.markdown("""
+<style>
+#MainMenu {visibility: hidden;}
+footer {visibility: hidden;}
+
+body {
+    background-color:#0e1117;
+    color:#e6e6e6;
+}
+
+.stButton>button {
+    width:100%;
+    background:#ff4b4b;
+    color:white;
+}
+</style>
+""", unsafe_allow_html=True)
+
+
+# ======================= SIDEBAR =======================
+st.sidebar.title("🧭 Navigation")
+section = st.sidebar.radio(
+    "",
+    ["Predict CVD Risk", "Graphs", "Dataset View", "Model Comparison", "Project Info"],
+    label_visibility="collapsed"
+)
+
+# ======================= PREDICTION =======================
+if section == "Predict CVD Risk":
+
+    st.title("❤️ CVD Risk Prediction System")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        age = st.slider("Age", 18, 100, 45)
+        bmi = st.slider("BMI", 10.0, 50.0, 25.0)
+        chol = st.slider("Total Cholesterol", 100, 350, 180)
+        ldl = st.slider("Estimated LDL", 50, 250, 120)
+
+    with col2:
+        sugar = st.slider("Fasting Blood Sugar", 60, 250, 100)
+        sex = st.selectbox("Sex", ["Male", "Female"])
+        activity = st.selectbox("Physical Activity Level", ["Low", "Moderate", "High"])
+        bp_cat = st.selectbox("Blood Pressure Category", ["Normal", "Elevated", "Hypertension"])
+
+    model_name = st.selectbox(
+        "Select Model",
+        ["Random Forest", "Logistic Regression", "Decision Tree", "XGBoost"]
+    )
+
+    input_data = {
+        "Age": age,
+        "BMI": bmi,
+        "Total Cholesterol (mg/dL)": chol,
+        "Fasting Blood Sugar (mg/dL)": sugar,
+        "Estimated LDL (mg/dL)": ldl,
+        "Sex_Male": 1 if sex == "Male" else 0,
+        "Physical Activity Level_Low": 1 if activity == "Low" else 0,
+        "Physical Activity Level_Moderate": 1 if activity == "Moderate" else 0,
+        "Blood Pressure Category_Elevated": 1 if bp_cat == "Elevated" else 0,
+        "Blood Pressure Category_Hypertension": 1 if bp_cat == "Hypertension" else 0
+    }
+
+    input_df = pd.DataFrame([input_data]).reindex(columns=X.columns, fill_value=0)
+    input_scaled = scaler.transform(input_df)
+
+    if st.button("🔍 Predict"):
+        if model_name == "Random Forest":
+            pred = rf.predict(input_df)
+        elif model_name == "Logistic Regression":
+            pred = lr.predict(input_scaled)
+        elif model_name == "Decision Tree":
+            pred = dt.predict(input_df)
+        else:
+            pred = xgb.predict(input_df)
+
+        result = le.inverse_transform(pred)[0]
+        st.success(f"Predicted CVD Risk Level: {result}")
+
+# ======================= GRAPHS =======================
+elif section == "Graphs":
+
+    st.title("📈 Data Visualizations")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        fig, ax = plt.subplots()
+        sns.histplot(df['Age'], kde=True, ax=ax)
+        st.pyplot(fig)
+
+    with col2:
+        fig, ax = plt.subplots()
+        sns.histplot(df['BMI'], kde=True, ax=ax)
+        st.pyplot(fig)
+
+    fig, ax = plt.subplots(figsize=(10,4))
+    sns.heatmap(df.select_dtypes(include='number').corr(), cmap='coolwarm', ax=ax)
+    st.pyplot(fig)
+
+# ======================= DATASET VIEW =======================
+elif section == "Dataset View":
+
+    st.title("📂 Dataset Overview")
+
+    st.subheader("Dataset Shape")
+    st.write(df.shape)
+
+    st.subheader("Sample Records")
+    st.dataframe(df.head(50), use_container_width=True)
+
+    st.subheader("Missing Values")
+    st.dataframe(df.isnull().sum())
+
+# ======================= MODEL COMPARISON =======================
+elif section == "Model Comparison":
+
+    st.title("📊 Model Comparison")
+
+    comparison_df = pd.DataFrame({
+        "Model": ["Logistic Regression", "Decision Tree", "Random Forest", "XGBoost"],
+        "Accuracy": [
+            accuracy_score(y_test, lr.predict(X_test_scaled)),
+            accuracy_score(y_test, dt.predict(X_test)),
+            accuracy_score(y_test, rf.predict(X_test)),
+            accuracy_score(y_test, xgb.predict(X_test))
+        ]
+    })
+
+    st.dataframe(comparison_df, use_container_width=True)
+
+    fig, ax = plt.subplots()
+    sns.barplot(x="Model", y="Accuracy", data=comparison_df, ax=ax)
+    ax.set_ylim(0, 1)
+    st.pyplot(fig)
+
+# ======================= PROJECT INFO =======================
+else:
+
+    st.title("📘 Project Information")
+
+    st.markdown("""
+    **Project:** Cardiovascular Disease Risk Prediction  
+    **Tech Stack:** Python, Machine Learning, XGBoost, Streamlit  
+    **Outcome:** Real-time healthcare risk prediction system  
+    """)
